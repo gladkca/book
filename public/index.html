@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>مكتبة جوني مصلح</title>
+
+<style>
+body {
+    background:#0b3d91;
+    font-family:Tahoma;
+    color:white;
+    text-align:center;
+}
+
+header {
+    background:#072c66;
+    padding:15px;
+    font-size:26px;
+    font-weight:bold;
+}
+
+.box {
+    background:#1e5bd8;
+    width:320px;
+    margin:20px auto;
+    padding:15px;
+}
+
+input {
+    width:90%;
+    padding:8px;
+    margin:5px;
+}
+
+button {
+    padding:8px;
+    margin:5px;
+    border:none;
+    cursor:pointer;
+}
+
+.add { background:white; color:#0b3d91; }
+.del { background:red; color:white; }
+.login { background:yellow; }
+
+li {
+    background:#163d7a;
+    margin:5px;
+    padding:10px;
+}
+a { color:yellow; margin:10px; }
+</style>
+</head>
+
+<body>
+
+<header>📚 مكتبة جوني مصلح</header>
+
+<div class="box">
+    <h3>تسجيل دخول الأدمن</h3>
+    <input id="password" placeholder="كلمة المرور">
+    <button class="login" onclick="login()">دخول</button>
+</div>
+
+<div class="box">
+    <h3>إضافة كتاب (Admin)</h3>
+    <input id="title" placeholder="اسم الكتاب">
+    <input type="file" id="file">
+    <button class="add" onclick="addBook()">إضافة</button>
+</div>
+
+<div class="box">
+    <h3>الكتب</h3>
+    <ul id="list"></ul>
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>

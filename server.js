@@ -1,111 +1,101 @@
 const express = require("express");
-const multer = require("multer");
-const cors = require("cors");
-const path = require("path");
 const fs = require("fs");
+const path = require("path");
+const multer = require("multer");
+const session = require("express-session");
 
 const app = express();
+const PORT = 3000;
 
-// ===== MIDDLEWARE =====
-app.use(cors());
+const BOOKS_FILE = path.join(__dirname, "books.json");
+const UPLOADS_DIR = path.join(__dirname, "uploads");
+
+// create files if missing
+if (!fs.existsSync(BOOKS_FILE)) fs.writeFileSync(BOOKS_FILE, "[]");
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR);
+
+// middleware
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static("public"));
+app.use("/uploads", express.static(UPLOADS_DIR));
 
-// serve frontend + uploads
-app.use(express.static(__dirname));
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// session system (REAL admin fix)
+app.use(session({
+    secret: "secret123",
+    resave: false,
+    saveUninitialized: true
+}));
 
-// ===== PORT (IMPORTANT FOR RENDER) =====
-const PORT = process.env.PORT || 3000;
-
-// ===== ADMIN PASSWORD =====
-const ADMIN_PASSWORD = "1234"; // 🔐 change this
-
-// ===== FILES =====
-const uploadFolder = path.join(__dirname, "uploads");
-const dbFile = path.join(__dirname, "books.json");
-
-// create if not exists
-if (!fs.existsSync(uploadFolder)) fs.mkdirSync(uploadFolder);
-if (!fs.existsSync(dbFile)) fs.writeFileSync(dbFile, "[]");
-
-// ===== HELPERS =====
-function loadBooks() {
-    return JSON.parse(fs.readFileSync(dbFile));
-}
-
-function saveBooks(data) {
-    fs.writeFileSync(dbFile, JSON.stringify(data, null, 2));
-}
-
-// ===== MULTER =====
+// file upload
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, "uploads/"),
+    destination: (req, file, cb) => cb(null, UPLOADS_DIR),
     filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname)
 });
-
 const upload = multer({ storage });
 
-// ===== UPLOAD BOOK (ADMIN ONLY) =====
-app.post("/upload", upload.single("file"), (req, res) => {
-    if (req.body.password !== ADMIN_PASSWORD) {
-        return res.status(403).json({ error: "Not allowed" });
+// =======================
+// ADMIN LOGIN
+// =======================
+const ADMIN_PASSWORD = "1234";
+
+app.post("/login", (req, res) => {
+    if (req.body.password === ADMIN_PASSWORD) {
+        req.session.isAdmin = true;
+        return res.json({ success: true });
     }
-
-    if (!req.file) {
-        return res.status(400).json({ error: "No file uploaded" });
-    }
-
-    const books = loadBooks();
-
-    const book = {
-        id: Date.now(),
-        name: req.body.name || "No Name",
-        fileName: req.file.filename,
-        url: "/uploads/" + req.file.filename
-    };
-
-    books.push(book);
-    saveBooks(books);
-
-    res.json(book);
+    res.json({ success: false });
 });
 
-// ===== GET BOOKS =====
+function checkAdmin(req, res, next) {
+    if (req.session.isAdmin) return next();
+    return res.status(403).json({ error: "Not admin" });
+}
+
+// =======================
+// GET BOOKS
+// =======================
 app.get("/books", (req, res) => {
-    res.json(loadBooks());
+    const books = JSON.parse(fs.readFileSync(BOOKS_FILE));
+    res.json(books);
 });
 
-// ===== DELETE BOOK (ADMIN ONLY) =====
-app.post("/delete", (req, res) => {
-    const { id, password } = req.body;
+// =======================
+// ADD BOOK (ADMIN ONLY)
+// =======================
+app.post("/books", checkAdmin, upload.single("file"), (req, res) => {
+    const books = JSON.parse(fs.readFileSync(BOOKS_FILE));
 
-    if (password !== ADMIN_PASSWORD) {
-        return res.status(403).json({ error: "Not allowed" });
-    }
+    books.push({
+        title: req.body.title || "بدون اسم",
+        file: req.file ? req.file.filename : null
+    });
 
-    let books = loadBooks();
+    fs.writeFileSync(BOOKS_FILE, JSON.stringify(books, null, 2));
 
-    const bookIndex = books.findIndex(b => b.id == id);
-
-    if (bookIndex === -1) {
-        return res.status(404).json({ error: "Book not found" });
-    }
-
-    const book = books[bookIndex];
-
-    // delete file
-    const filePath = path.join(__dirname, "uploads", book.fileName);
-    if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-    }
-
-    books.splice(bookIndex, 1);
-    saveBooks(books);
-
-    res.json({ success: true });
+    res.json({ message: "added" });
 });
 
-// ===== START SERVER =====
+// =======================
+// DELETE BOOK (ADMIN ONLY)
+// =======================
+app.delete("/books/:id", checkAdmin, (req, res) => {
+    const books = JSON.parse(fs.readFileSync(BOOKS_FILE));
+    const id = parseInt(req.params.id);
+
+    if (!isNaN(id) && books[id]) {
+        books.splice(id, 1);
+        fs.writeFileSync(BOOKS_FILE, JSON.stringify(books, null, 2));
+    }
+
+    res.json({ message: "deleted" });
+});
+
+// fallback FIXED
+app.use((req, res) => {
+    res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
 app.listen(PORT, () => {
-    console.log("✅ Server running on port " + PORT);
+    console.log("🚀 Server running: http://localhost:" + PORT);
 });
