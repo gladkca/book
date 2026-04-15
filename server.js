@@ -1,101 +1,85 @@
 const express = require("express");
-const fs = require("fs");
-const path = require("path");
 const multer = require("multer");
-const session = require("express-session");
+const path = require("path");
+const fs = require("fs");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-const BOOKS_FILE = path.join(__dirname, "books.json");
-const UPLOADS_DIR = path.join(__dirname, "uploads");
+// =======================
+// MEMORY STORAGE (IMPORTANT)
+// =======================
+let books = [];
 
-// create files if missing
-if (!fs.existsSync(BOOKS_FILE)) fs.writeFileSync(BOOKS_FILE, "[]");
-if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR);
+// =======================
+// FILE UPLOAD SETUP
+// =======================
+const upload = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => {
+            cb(null, "uploads/");
+        },
+        filename: (req, file, cb) => {
+            cb(null, Date.now() + "-" + file.originalname);
+        }
+    })
+});
 
-// middleware
+// =======================
+// MIDDLEWARE
+// =======================
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 app.use(express.static("public"));
-app.use("/uploads", express.static(UPLOADS_DIR));
+app.use("/uploads", express.static("uploads"));
 
-// session system (REAL admin fix)
-app.use(session({
-    secret: "secret123",
-    resave: false,
-    saveUninitialized: true
-}));
-
-// file upload
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, UPLOADS_DIR),
-    filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname)
-});
-const upload = multer({ storage });
-
-// =======================
-// ADMIN LOGIN
-// =======================
-const ADMIN_PASSWORD = "1234";
-
-app.post("/login", (req, res) => {
-    if (req.body.password === ADMIN_PASSWORD) {
-        req.session.isAdmin = true;
-        return res.json({ success: true });
-    }
-    res.json({ success: false });
-});
-
-function checkAdmin(req, res, next) {
-    if (req.session.isAdmin) return next();
-    return res.status(403).json({ error: "Not admin" });
+// make uploads folder if missing
+if (!fs.existsSync("uploads")) {
+    fs.mkdirSync("uploads");
 }
 
 // =======================
 // GET BOOKS
 // =======================
 app.get("/books", (req, res) => {
-    const books = JSON.parse(fs.readFileSync(BOOKS_FILE));
     res.json(books);
 });
 
 // =======================
-// ADD BOOK (ADMIN ONLY)
+// ADD BOOK
 // =======================
-app.post("/books", checkAdmin, upload.single("file"), (req, res) => {
-    const books = JSON.parse(fs.readFileSync(BOOKS_FILE));
-
-    books.push({
+app.post("/books", upload.single("file"), (req, res) => {
+    const newBook = {
+        id: Date.now(),
         title: req.body.title || "بدون اسم",
         file: req.file ? req.file.filename : null
-    });
+    };
 
-    fs.writeFileSync(BOOKS_FILE, JSON.stringify(books, null, 2));
+    books.push(newBook);
 
-    res.json({ message: "added" });
+    res.json({ success: true, book: newBook });
 });
 
 // =======================
-// DELETE BOOK (ADMIN ONLY)
+// DELETE BOOK
 // =======================
-app.delete("/books/:id", checkAdmin, (req, res) => {
-    const books = JSON.parse(fs.readFileSync(BOOKS_FILE));
+app.delete("/books/:id", (req, res) => {
     const id = parseInt(req.params.id);
 
-    if (!isNaN(id) && books[id]) {
-        books.splice(id, 1);
-        fs.writeFileSync(BOOKS_FILE, JSON.stringify(books, null, 2));
-    }
+    books = books.filter(b => b.id !== id);
 
-    res.json({ message: "deleted" });
+    res.json({ success: true });
 });
 
-// fallback FIXED
-app.use((req, res) => {
+// =======================
+// SERVE FRONTEND
+// =======================
+app.get("*", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
+// =======================
+// START SERVER
+// =======================
 app.listen(PORT, () => {
-    console.log("🚀 Server running: http://localhost:" + PORT);
+    console.log("Server running on port " + PORT);
 });
